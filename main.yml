@@ -16,6 +16,7 @@
   - name: Provissioning elb target_groups
     elb_target_group:
       name: defaultElbPort
+      region: ap-south-1
       protocol: http
       port: 80
       vpc_id: vpc-fee02e96
@@ -26,6 +27,7 @@
     elb_application_lb:
       name: myelb
       state: present
+      region: ap-south-1
       security_groups:
         - Demo_Security
       subnets:
