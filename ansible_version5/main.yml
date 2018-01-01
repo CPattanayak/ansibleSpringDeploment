@@ -1,0 +1,148 @@
+---
+- hosts: localhost
+  
+  tasks:
+
+  - name: Install python-boto library
+    pip: name=boto
+
+  - name: Setting up Security/Firewall Group
+    ec2_group:
+       name: Demo_Security
+       description: "demo security group"
+       aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+       aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
+       region: ap-south-1
+       rules:
+        - proto: tcp
+          from_port: 80
+          to_port: 80
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 22
+          to_port: 22
+          cidr_ip: 0.0.0.0/0
+       rules_egress:
+        - proto: all
+          cidr_ip: 0.0.0.0/0  
+
+  - name: Provissioning cluster
+    ecs_cluster:
+      name: developmentcluster
+      state: present
+      region: ap-south-1
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
+    register: task_output
+
+  - name: creating ecs ecs rolles
+    iam:
+      iam_type: role
+      name: "ecs_discovery"
+      state: present
+      region: ap-south-1
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
+
+  - name: attaching IAM policy to rolles
+    iam_policy:
+      iam_type: role
+      iam_name: "ecs_discovery"
+      policy_name: "ecs_policy"
+      state: present
+      policy_document: ecs_policy.json
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
+
+  - name: Provissioning elb target_groups
+    elb_target_group:
+      name: defaultElbPort
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
+      protocol: http
+      port: 80
+      vpc_id: vpc-fee02e96
+      state: present
+    register: targrp 
+
+  - name: creating Application ELB
+    elb_application_lb:
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
+      name: myelb
+      state: present
+      security_groups:
+        - Demo_Security
+      subnets:
+        - subnet-18919755
+        - subnet-7209dd1a
+      listeners:
+        - Protocol: HTTP
+          Port: 80
+          DefaultActions:
+            - Type: forward 
+              TargetGroupName: defaultElbPort
+                     
+  - name: Provission a EC2 Instance
+    ec2:
+       key_name: mumbaiKey
+       region: ap-south-1
+       aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+       aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
+       instance_type: t2.micro
+       instance_profile_name: ecs_discovery
+       image: ami-e4d29c8b
+       user_data: "#!/bin/bash\n
+                   echo ECS_CLUSTER=developmentcluster >> /etc/ecs/ecs.config\n
+                   sudo yum update -y ecs-init\n"
+       wait: yes
+       wait_timeout: 500
+       count: 1
+       instance_tags:
+         Name: awslabserver
+         Owner: Chandan
+       monitoring: no
+       vpc_subnet_id: subnet-7209dd1a
+       assign_public_ip: yes
+       group: Demo_Security
+    register: ec2_out
+
+  - name: wait for SSH to come up
+    wait_for: host={{ item.public_dns_name }} port=22 delay=60 timeout=320 state=started
+    with_items: '{{ec2_out.instances}}'
+  
+  - name: creating taskdefination
+    ecs_taskdefinition:
+      region: ap-south-1
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
+      containers:
+      - name: demo_application
+        cpu: 2
+        essential: true
+        image: "cpattanayak/spring-petclinic"
+        memory: 500
+        portMappings:
+        - containerPort: 8080
+          hostPort: 80
+      state: present
+      family: test_task
+    register: task_def_output
+
+  - name: create ecs service
+    ecs_service:
+      state: present
+      region: ap-south-1
+      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
+      name: demo_service
+      cluster: "developmentcluster"
+      load_balancers:
+        - targetGroupArn: "{{targrp.target_group_arn}}"
+          containerName: demo_application
+          containerPort: 8080
+      task_definition: "{{  task_def_output.taskdefinition[\"family\"]   }}:{{ task_def_output.taskdefinition[\"revision\"] }}"
+      desired_count: 1       
+    register: service_output 
+ 
+
