@@ -3,9 +3,6 @@
   
   tasks:
 
-  - name: Install python-boto library
-    pip: name=boto
-
   - name: Provissioning cluster
     ecs_cluster:
       name: developmentcluster
