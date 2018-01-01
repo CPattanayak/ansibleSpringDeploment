@@ -11,15 +11,11 @@
       name: developmentcluster
       state: present
       region: ap-south-1
-      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
     register: task_output
 
   - name: Provissioning elb target_groups
     elb_target_group:
       name: defaultElbPort
-      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
       protocol: http
       port: 80
       vpc_id: vpc-fee02e96
@@ -28,8 +24,6 @@
 
   - name: creating Application ELB
     elb_application_lb:
-      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
       name: myelb
       state: present
       security_groups:
@@ -48,8 +42,6 @@
     ec2:
        key_name: mumbaiKey
        region: ap-south-1
-       aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-       aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
        instance_type: t2.micro
        instance_profile_name: ecs_discovery
        image: ami-e4d29c8b
@@ -75,8 +67,6 @@
   - name: creating taskdefination
     ecs_taskdefinition:
       region: ap-south-1
-      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}"
       containers:
       - name: demo_application
         cpu: 2
@@ -94,8 +84,6 @@
     ecs_service:
       state: present
       region: ap-south-1
-      aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
-      aws_secret_key: "{{ lookup('env','AWS_SECRET_ACCESS_KEY') }}" 
       name: demo_service
       cluster: "developmentcluster"
       load_balancers:
